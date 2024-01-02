@@ -2,7 +2,7 @@
 ## STM32L4R9ZI-SensorTile.box
 
 ### Achieved
-Changed the code to make it generate new log files every 1 min
+Updated code of HSDatalog for it to log data every 1 min by creating new files every 1 min
 
 ### Steps
 1. Created a new signal "NEWFILE_SIGNAL"
