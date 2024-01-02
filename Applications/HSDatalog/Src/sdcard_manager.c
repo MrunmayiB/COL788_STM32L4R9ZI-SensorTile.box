@@ -115,6 +115,10 @@ static void SDM_Memory_Timer_Callback(void const *argument);
 osTimerId SDM_Memory_Timer_Id;
 osTimerDef(SDM_Memory_Timer, SDM_Memory_Timer_Callback);
 
+static void SDM_NewFiles_Timer_Callback(void const *argument);
+osTimerId SDM_NewFiles_Timer_Id;
+osTimerDef(SDM_NewFiles_Timer, SDM_NewFiles_Timer_Callback);
+
 osThreadId SDM_Thread_Id;
 static void SDM_Thread(void const *argument);
 
@@ -125,6 +129,7 @@ static void Activate_Sensor(uint32_t id);
 
 static void SDM_Boot(void);
 static void SDM_DataReady(osEvent evt);
+static void SDM_NewFiles(osEvent evt);
 static void SDM_StartStopAcquisition(void);
 static void SDM_StartAcquisition(void);
 static void SDM_StopAcquisition(void);
@@ -301,6 +306,10 @@ static void SDM_Thread(void const *argument)
             StopExecutionPhases();
           }
         }
+        if (evt.value.v == SDM_NEWFILE_SIGNAL)
+        {
+          SDM_NewFiles(evt);
+        }
         if (evt.value.v == SDM_START_STOP) /* start/stop acquisition command */
         {
           SDM_StartStopAcquisition();
@@ -375,6 +384,7 @@ static void SDM_StartAcquisition(void)
 
   osTimerStop(bleAdvUpdaterTim_id);
   osTimerStart(SDM_Memory_Timer_Id, SD_CHECK_TIME);
+  osTimerStart(SDM_NewFiles_Timer_Id,SD_CHECK_TIME);
 
   COM_GenerateAcquisitionUUID();
 
@@ -414,6 +424,7 @@ static void SDM_StopAcquisition(void)
   SDM_EndSDOperation();
   com_status = HS_DATALOG_IDLE;
   osTimerStop(SDM_Memory_Timer_Id);
+  osTimerStop(SDM_NewFiles_Timer_Id);
   osTimerStart(bleAdvUpdaterTim_id, HSD_BLE_ADV_UPDATER_TIMER);
 }
 
@@ -444,6 +455,18 @@ static void SDM_DataReady(osEvent evt)
     SDM_WriteBuffer(sID, ssID, (uint8_t *)(pSubSensorContext->sd_write_buffer + buf_size), buf_size);
   }
 }
+
+static void SDM_NewFiles(osEvent evt)
+{
+  uint8_t sID = (uint8_t)(evt.value.v & SDM_SENSOR_ID_MASK);
+  uint8_t ssID = (uint8_t)((evt.value.v & SDM_SUBSENSOR_ID_MASK) >> 8);
+
+  SDM_Flush_Buffer(sID,ssID);
+  SDM_CloseFiles();
+  SDM_InitFiles();
+
+}
+
 
 /**
   * @brief  Check if a custom configuration JSON or UCF is available in the root folder of the SD Card
@@ -804,6 +827,7 @@ void SDM_OS_Init(void)
 
   /* Create periodic timer to check SD card memory */
   SDM_Memory_Timer_Id = osTimerCreate(osTimer(SDM_Memory_Timer), osTimerPeriodic, NULL);
+  SDM_NewFiles_Timer_Id = osTimerCreate(osTimer(SDM_NewFiles_Timer),osTimerPeriodic,NULL);
 }
 
 /**
@@ -1322,7 +1346,7 @@ uint8_t SDM_Flush_Buffer(uint8_t sID, uint8_t ssID)
   {
     /* flush from half buffer */
     ret = SDM_WriteBuffer(sID, ssID, (uint8_t *)(pSubSensorContext->sd_write_buffer + bufSize), 
-	                      pSubSensorContext->sd_write_buffer_idx + 1 - bufSize);
+                        pSubSensorContext->sd_write_buffer_idx + 1 - bufSize);
   }
 
   pSubSensorContext->sd_write_buffer_idx = 0;
@@ -1542,6 +1566,14 @@ void SDM_SetStopEPCallback(SDMTaskStopEPCallback pfCallback)
 static void SDM_Memory_Timer_Callback(void const *argument)
 {
   if (osMessagePut(sdThreadQueue_id, SDM_CHECK_MEMORY_USAGE, 0) != osOK)
+  {
+    SDM_Error_Handler();
+  }
+}
+
+static void SDM_NewFiles_Timer_Callback(void const *argument)
+{
+  if (osMessagePut(sdThreadQueue_id, SDM_NEWFILE_SIGNAL, 0) != osOK)
   {
     SDM_Error_Handler();
   }
