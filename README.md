@@ -10,3 +10,7 @@ Changed the code to make it generate new log files every 1 min
 3. This function then sends the NEWFILE_SIGNAL to the main thread of sd card manager
 4. The main thread on recieving this NEWFILE_SIGNAL, closes the current files and opens new files for logging
 5. This is done on every callback to the timer function
+
+### Example
+
+Added STBOX_00001.zip.gz as an example of the log file that is created every 1 min
